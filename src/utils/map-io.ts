@@ -117,6 +117,18 @@ export function loadMapFromJson(json: string): MapData {
 }
 
 /**
+ * public/maps/ 디렉토리에서 샘플 맵 파일을 fetch로 로드합니다.
+ */
+export async function fetchSampleMap(filename: string): Promise<MapData> {
+  const response = await fetch(`/maps/${filename}`);
+  if (!response.ok) {
+    throw new Error(`샘플 맵을 불러올 수 없습니다: ${filename} (${response.status})`);
+  }
+  const text = await response.text();
+  return loadMapFromJson(text);
+}
+
+/**
  * 기본값으로 채워진 빈 MapData를 생성합니다.
  */
 export function createEmptyMap(): MapData {

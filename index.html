@@ -10,6 +10,47 @@
     </style>
   </head>
   <body>
+    <div id="game-container"></div>
+
+    <!-- Toolbar: 상단 고정 -->
+    <div id="toolbar">
+      <button class="tool-btn" data-tool="select" title="선택 도구">☝ 선택</button>
+      <div class="separator"></div>
+      <button class="tool-btn" data-tool="floor" title="Floor">Floor</button>
+      <button class="tool-btn" data-tool="one_way_platform" title="Platform">Platform</button>
+      <button class="tool-btn" data-tool="solid_wall" title="Wall">Wall</button>
+      <button class="tool-btn" data-tool="fall_zone" title="Fall Zone">Fall Zone</button>
+      <button class="tool-btn" data-tool="instant_kill_hazard" title="Kill Hazard">Kill Hazard</button>
+      <button class="tool-btn" data-tool="spawn_point" title="Spawn">Spawn</button>
+      <button class="tool-btn" data-tool="weapon_spawn" title="Weapon">Weapon</button>
+      <button class="tool-btn" data-tool="item_spawn" title="Item">Item</button>
+      <div class="separator"></div>
+      <button class="toggle-btn" id="btn-grid-toggle" title="그리드 크기 전환">Grid: 40</button>
+      <button class="toggle-btn on" id="btn-snap-toggle" title="스냅 토글">Snap: ON</button>
+      <div class="separator"></div>
+      <button class="action-btn" id="btn-import" title="맵 가져오기">Import</button>
+      <button class="action-btn" id="btn-export" title="맵 내보내기">Export</button>
+    </div>
+
+    <!-- Properties Panel: 우측 고정 -->
+    <div id="properties-panel">
+      <div id="element-props">
+        <div class="empty-state">요소를 선택하세요</div>
+      </div>
+      <div class="panel-section" id="map-metadata">
+        <div class="panel-section-title">맵 메타데이터</div>
+        <div id="map-metadata-fields"></div>
+      </div>
+    </div>
+
+    <!-- StatusBar: 하단 고정 -->
+    <div id="status-bar">
+      <span class="status-item">요소: <span class="status-value" id="status-element-count">0</span></span>
+      <span class="status-item">줌: <span class="status-value" id="status-zoom">100%</span></span>
+      <span class="status-item">그리드: <span class="status-value" id="status-grid">40</span></span>
+      <span class="status-item">스냅: <span class="status-value" id="status-snap">ON</span></span>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
