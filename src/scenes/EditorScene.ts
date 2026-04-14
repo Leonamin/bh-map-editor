@@ -3,17 +3,14 @@ import { EDITOR_CONFIG } from "@/config";
 import { editorState } from "@/state/EditorState";
 import { GridOverlay } from "@/objects/GridOverlay";
 import { BoundsOverlay } from "@/objects/BoundsOverlay";
+import { ElementManager } from "@/systems/ElementManager";
+import { InteractionSystem } from "@/systems/InteractionSystem";
 
 export class EditorScene extends Phaser.Scene {
   private gridOverlay!: GridOverlay;
   private boundsOverlay!: BoundsOverlay;
-
-  // Camera pan state
-  private isPanning = false;
-  private panStartX = 0;
-  private panStartY = 0;
-  private camStartScrollX = 0;
-  private camStartScrollY = 0;
+  private elementManager!: ElementManager;
+  private interactionSystem!: InteractionSystem;
 
   // Track last camera state for dirty checking
   private lastScrollX = 0;
@@ -39,10 +36,17 @@ export class EditorScene extends Phaser.Scene {
     // Bounds 오버레이 생성
     this.boundsOverlay = new BoundsOverlay(this);
 
+    // 요소 매니저 생성
+    this.elementManager = new ElementManager(this);
+
+    // 인터랙션 시스템 생성 및 입력 설정
+    this.interactionSystem = new InteractionSystem(this, this.elementManager);
+    this.interactionSystem.setupInput();
+
     // 초기 렌더링
     this.updateOverlays();
 
-    // 입력 리스너 설정
+    // 기존 입력 리스너 설정 (줌, 컨텍스트 메뉴 방지, Home 키)
     this.setupInputListeners();
 
     // 카메라 초기 위치: 맵 중앙
@@ -66,6 +70,40 @@ export class EditorScene extends Phaser.Scene {
     }
   }
 
+  // ─── Public API (UI에서 호출) ───
+
+  /**
+   * ElementManager 인스턴스를 반환합니다.
+   */
+  getElementManager(): ElementManager {
+    return this.elementManager;
+  }
+
+  /**
+   * InteractionSystem의 선택 변경 콜백을 설정합니다.
+   */
+  setOnSelectionChange(callback: (elementId: string | null) => void): void {
+    this.interactionSystem.onSelectionChange = callback;
+  }
+
+  /**
+   * InteractionSystem의 요소 업데이트 콜백을 설정합니다.
+   */
+  setOnElementUpdate(callback: (elementId: string) => void): void {
+    this.interactionSystem.onElementUpdate = callback;
+  }
+
+  /**
+   * 맵 데이터를 다시 로드하여 모든 렌더러를 재구성합니다.
+   */
+  rebuildFromMapData(): void {
+    this.elementManager.rebuildAll();
+    this.boundsOverlay.redraw(editorState.mapData);
+    this.updateOverlays();
+  }
+
+  // ─── Private ───
+
   /**
    * 그리드와 Bounds 오버레이를 현재 카메라 상태에 맞게 다시 그립니다.
    */
@@ -76,7 +114,8 @@ export class EditorScene extends Phaser.Scene {
   }
 
   /**
-   * 마우스, 키보드 입력 리스너를 설정합니다.
+   * 줌, 컨텍스트 메뉴 방지, Home 키 리스너를 설정합니다.
+   * 카메라 팬은 InteractionSystem이 처리합니다.
    */
   private setupInputListeners(): void {
     // 마우스 휠 — 줌 (마우스 위치 기준)
@@ -89,37 +128,6 @@ export class EditorScene extends Phaser.Scene {
         deltaY: number,
       ) => {
         this.handleZoom(deltaY);
-      },
-    );
-
-    // 우클릭 / 중클릭 드래그 — 카메라 팬
-    this.input.on(
-      "pointerdown",
-      (pointer: Phaser.Input.Pointer) => {
-        if (pointer.rightButtonDown() || pointer.middleButtonDown()) {
-          this.startPan(pointer);
-        }
-      },
-    );
-
-    this.input.on(
-      "pointermove",
-      (pointer: Phaser.Input.Pointer) => {
-        if (this.isPanning) {
-          this.doPan(pointer);
-        }
-      },
-    );
-
-    this.input.on(
-      "pointerup",
-      (pointer: Phaser.Input.Pointer) => {
-        if (
-          this.isPanning &&
-          (pointer.rightButtonReleased() || pointer.middleButtonReleased())
-        ) {
-          this.isPanning = false;
-        }
       },
     );
 
@@ -168,30 +176,6 @@ export class EditorScene extends Phaser.Scene {
 
     editorState.zoom = newZoom;
     this.updateOverlays();
-  }
-
-  /**
-   * 카메라 팬을 시작합니다.
-   */
-  private startPan(pointer: Phaser.Input.Pointer): void {
-    this.isPanning = true;
-    this.panStartX = pointer.x;
-    this.panStartY = pointer.y;
-    const camera = this.cameras.main;
-    this.camStartScrollX = camera.scrollX;
-    this.camStartScrollY = camera.scrollY;
-  }
-
-  /**
-   * 카메라 팬을 수행합니다.
-   */
-  private doPan(pointer: Phaser.Input.Pointer): void {
-    const camera = this.cameras.main;
-    const dx = pointer.x - this.panStartX;
-    const dy = pointer.y - this.panStartY;
-
-    camera.scrollX = this.camStartScrollX - dx / camera.zoom;
-    camera.scrollY = this.camStartScrollY - dy / camera.zoom;
   }
 
   /**
