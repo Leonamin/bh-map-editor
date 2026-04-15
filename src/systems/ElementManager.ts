@@ -115,7 +115,7 @@ export class ElementManager {
           respawnMs: 10000,
           despawnAfterMs: 0,
           spawnStyle: "fade_in",
-          despawnStyle: "fade_out",
+          despawnStyle: "shrink_pop",
           mode: "fixed",
         } as WeaponSpawn;
         break;
