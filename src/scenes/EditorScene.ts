@@ -5,8 +5,8 @@ import { GridOverlay } from "@/objects/GridOverlay";
 import { BoundsOverlay } from "@/objects/BoundsOverlay";
 import { ElementManager } from "@/systems/ElementManager";
 import { InteractionSystem } from "@/systems/InteractionSystem";
-import { EditorHud } from "@/ui/EditorHud";
 import { ToastManager } from "@/ui/ToastManager";
+import { useEditorStore } from "@/store/editorStore";
 import { loadMapFromFile, loadMapFromFileObject, downloadMapFile } from "@/utils/map-io";
 
 export class EditorScene extends Phaser.Scene {
@@ -14,7 +14,6 @@ export class EditorScene extends Phaser.Scene {
   private boundsOverlay!: BoundsOverlay;
   private elementManager!: ElementManager;
   private interactionSystem!: InteractionSystem;
-  private hud!: EditorHud;
   private toastManager!: ToastManager;
   private removeFileDropListeners: (() => void) | null = null;
 
@@ -49,17 +48,6 @@ export class EditorScene extends Phaser.Scene {
     this.interactionSystem = new InteractionSystem(this, this.elementManager);
     this.interactionSystem.setupInput();
 
-    this.hud = new EditorHud(this, {
-      onImportRequested: () => this.handleImportRequested(),
-      onElementEdited: (elementId) => this.handleElementEdited(elementId),
-      onMapMetadataEdited: () => this.handleMapMetadataEdited(),
-      onDeleteSelected: () => this.handleDeleteSelected(),
-      onViewportSettingChanged: () => {
-        this.updateOverlays();
-        this.hud.refreshAll();
-      },
-    });
-
     // 토스트 매니저 생성
     this.toastManager = new ToastManager(this);
 
@@ -78,6 +66,9 @@ export class EditorScene extends Phaser.Scene {
 
     // 카메라 초기 위치: 맵 중앙
     this.centerCamera();
+
+    // 초기 Zustand 스토어 동기화
+    this.syncStore();
   }
 
   update(): void {
@@ -97,8 +88,9 @@ export class EditorScene extends Phaser.Scene {
     }
   }
 
-  isPointerOverUI(screenX: number, screenY: number): boolean {
-    return this.hud.containsScreenPoint(screenX, screenY);
+  isPointerOverUI(_screenX: number, _screenY: number): boolean {
+    // P1: HUD 없음 — 항상 false. P2에서 React 패널 영역 체크로 개선.
+    return false;
   }
 
   rebuildFromMapData(): void {
@@ -109,10 +101,43 @@ export class EditorScene extends Phaser.Scene {
     }
     this.boundsOverlay.redraw(editorState.mapData);
     this.updateOverlays();
-    this.hud.refreshAll();
+    this.syncStore();
   }
 
   // ─── Private ───
+
+  /** editorState → Zustand 스토어 동기화 */
+  private syncStore(): void {
+    const store = useEditorStore.getState();
+    const el = editorState.selectedId
+      ? editorState.getSelectedElement() ?? null
+      : null;
+    store.setSelectedId(editorState.selectedId);
+    store.setSelectedElement(el);
+    store.setMapData(editorState.mapData);
+    store.setGridSize(editorState.gridSize);
+    store.setSnapEnabled(editorState.snapEnabled);
+    store.setZoom(editorState.zoom);
+    store.setUndoRedoState(
+      editorState.undoStack.length > 0,
+      editorState.redoStack.length > 0,
+    );
+    // Element counts for status bar
+    const counts: Record<string, number> = {};
+    for (const arr of [
+      editorState.mapData.collision,
+      editorState.mapData.hazards,
+      editorState.mapData.spawnPoints,
+      editorState.mapData.weaponSpawns,
+      editorState.mapData.itemSpawns,
+    ]) {
+      for (const e of arr) {
+        const type = "type" in e ? (e as { type: string }).type : "spawn_point";
+        counts[type] = (counts[type] || 0) + 1;
+      }
+    }
+    store.setElementCounts(counts);
+  }
 
   /**
    * 그리드와 Bounds 오버레이를 현재 카메라 상태에 맞게 다시 그립니다.
@@ -121,7 +146,7 @@ export class EditorScene extends Phaser.Scene {
     const zoom = this.cameras.main.zoom;
     this.gridOverlay.redraw(zoom);
     this.boundsOverlay.redraw(editorState.mapData);
-    this.hud.refreshStatus();
+    this.syncStore();
   }
 
   /**
@@ -138,9 +163,6 @@ export class EditorScene extends Phaser.Scene {
         _deltaX: number,
         deltaY: number,
       ) => {
-        if (this.hud.handleWheel(pointer.x, pointer.y, deltaY)) {
-          return;
-        }
         if (this.isPointerOverUI(pointer.x, pointer.y)) {
           return;
         }
@@ -160,8 +182,7 @@ export class EditorScene extends Phaser.Scene {
     });
 
     this.interactionSystem.onSelectionChange = () => {
-      this.hud.refreshProperties();
-      this.hud.refreshStatus();
+      this.syncStore();
     };
     this.interactionSystem.onElementUpdate = (elementId) => {
       this.handleElementEdited(elementId);
@@ -175,8 +196,7 @@ export class EditorScene extends Phaser.Scene {
   }
 
   private setupResizeListener(): void {
-    this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
-      this.hud.layout(gameSize.width, gameSize.height);
+    this.scale.on("resize", () => {
       this.toastManager.relayout();
       this.updateOverlays();
     });
@@ -244,24 +264,7 @@ export class EditorScene extends Phaser.Scene {
     if (editorState.selectedId === elementId) {
       this.elementManager.selectElement(elementId);
     }
-    this.hud.refreshProperties();
-    this.hud.refreshStatus();
-  }
-
-  private handleMapMetadataEdited(): void {
-    this.updateOverlays();
-    this.hud.refreshAll();
-  }
-
-  private handleDeleteSelected(): void {
-    const selectedId = editorState.selectedId;
-    if (!selectedId) {
-      return;
-    }
-
-    this.elementManager.removeElement(selectedId);
-    this.toastManager.warn(`요소 삭제됨: ${selectedId}`);
-    this.hud.refreshAll();
+    this.syncStore();
   }
 
   private async handleImportRequested(): Promise<void> {
@@ -280,7 +283,7 @@ export class EditorScene extends Phaser.Scene {
     this.rebuildFromMapData();
     this.centerCamera();
     this.updateOverlays();
-    this.hud.refreshAll();
+    this.syncStore();
   }
 
   private setupFileDropListeners(): void {
@@ -295,7 +298,6 @@ export class EditorScene extends Phaser.Scene {
       }
       event.preventDefault();
       dragDepth += 1;
-      this.hud.setDropActive(true);
     };
 
     const onDragOver = (event: DragEvent): void => {
@@ -306,7 +308,6 @@ export class EditorScene extends Phaser.Scene {
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = "copy";
       }
-      this.hud.setDropActive(true);
     };
 
     const onDragLeave = (event: DragEvent): void => {
@@ -315,9 +316,6 @@ export class EditorScene extends Phaser.Scene {
       }
       event.preventDefault();
       dragDepth = Math.max(0, dragDepth - 1);
-      if (dragDepth === 0) {
-        this.hud.setDropActive(false);
-      }
     };
 
     const onDrop = async (event: DragEvent): Promise<void> => {
@@ -326,7 +324,6 @@ export class EditorScene extends Phaser.Scene {
       }
       event.preventDefault();
       dragDepth = 0;
-      this.hud.setDropActive(false);
 
       const file = event.dataTransfer?.files?.[0];
       if (!file) {
@@ -360,7 +357,6 @@ export class EditorScene extends Phaser.Scene {
       this.removeFileDropListeners = null;
       this.interactionSystem.destroy();
       this.toastManager.destroy();
-      this.hud.destroy();
     });
   }
 }
