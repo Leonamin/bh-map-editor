@@ -142,8 +142,10 @@ export class InteractionSystem {
     // ─── Keyboard ───
     this.scene.input.keyboard?.on("keydown-DELETE", () => {
       if (editorState.selectedId) {
-        this.elementManager.removeElement(editorState.selectedId);
+        const deletedId = editorState.selectedId;
+        this.elementManager.removeElement(deletedId);
         this.onSelectionChange?.(null);
+        this.onToastMessage?.(`요소 삭제됨: ${deletedId}`);
       }
     });
 

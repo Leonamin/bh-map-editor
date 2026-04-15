@@ -260,6 +260,7 @@ export class EditorScene extends Phaser.Scene {
     }
 
     this.elementManager.removeElement(selectedId);
+    this.toastManager.warn(`요소 삭제됨: ${selectedId}`);
     this.hud.refreshAll();
   }
 
@@ -267,8 +268,10 @@ export class EditorScene extends Phaser.Scene {
     try {
       const data = await loadMapFromFile();
       this.loadMapData(data);
+      this.toastManager.success(`맵 가져오기 성공: ${data.name}`);
     } catch (error) {
       console.error("맵 가져오기 실패:", error);
+      this.toastManager.error("맵 가져오기 실패");
     }
   }
 
@@ -333,8 +336,10 @@ export class EditorScene extends Phaser.Scene {
       try {
         const data = await loadMapFromFileObject(file);
         this.loadMapData(data);
+        this.toastManager.success(`맵 가져오기 성공: ${data.name}`);
       } catch (error) {
         console.error("드래그앤드롭 가져오기 실패:", error);
+        this.toastManager.error("드래그앤드롭 가져오기 실패");
       }
     };
 
