@@ -20,7 +20,9 @@ export abstract class EditorElementRenderer extends Phaser.GameObjects.Container
     this.selectionOutline = scene.add.graphics();
     this.resizeHandles = [];
     this.add([this.graphics, this.selectionOutline]);
-    this.drawShape();
+    // NOTE: drawShape()은 각 하위 클래스 생성자에서 호출합니다.
+    // 부모 생성자에서 호출하면 하위 클래스의 필드(rect, elementType 등)가
+    // 아직 초기화되지 않은 상태에서 drawShape()이 실행되어 TypeError가 발생합니다.
   }
 
   /** 요소의 시각적 형태를 그립니다. */
