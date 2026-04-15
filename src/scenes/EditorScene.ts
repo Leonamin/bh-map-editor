@@ -5,12 +5,16 @@ import { GridOverlay } from "@/objects/GridOverlay";
 import { BoundsOverlay } from "@/objects/BoundsOverlay";
 import { ElementManager } from "@/systems/ElementManager";
 import { InteractionSystem } from "@/systems/InteractionSystem";
+import { EditorHud } from "@/ui/EditorHud";
+import { loadMapFromFile, loadMapFromFileObject, downloadMapFile } from "@/utils/map-io";
 
 export class EditorScene extends Phaser.Scene {
   private gridOverlay!: GridOverlay;
   private boundsOverlay!: BoundsOverlay;
   private elementManager!: ElementManager;
   private interactionSystem!: InteractionSystem;
+  private hud!: EditorHud;
+  private removeFileDropListeners: (() => void) | null = null;
 
   // Track last camera state for dirty checking
   private lastScrollX = 0;
@@ -43,11 +47,24 @@ export class EditorScene extends Phaser.Scene {
     this.interactionSystem = new InteractionSystem(this, this.elementManager);
     this.interactionSystem.setupInput();
 
+    this.hud = new EditorHud(this, {
+      onImportRequested: () => this.handleImportRequested(),
+      onElementEdited: (elementId) => this.handleElementEdited(elementId),
+      onMapMetadataEdited: () => this.handleMapMetadataEdited(),
+      onDeleteSelected: () => this.handleDeleteSelected(),
+      onViewportSettingChanged: () => {
+        this.updateOverlays();
+        this.hud.refreshAll();
+      },
+    });
+
     // 초기 렌더링
     this.updateOverlays();
 
     // 기존 입력 리스너 설정 (줌, 컨텍스트 메뉴 방지, Home 키)
     this.setupInputListeners();
+    this.setupResizeListener();
+    this.setupFileDropListeners();
 
     // 카메라 초기 위치: 맵 중앙
     this.centerCamera();
@@ -70,36 +87,19 @@ export class EditorScene extends Phaser.Scene {
     }
   }
 
-  // ─── Public API (UI에서 호출) ───
-
-  /**
-   * ElementManager 인스턴스를 반환합니다.
-   */
-  getElementManager(): ElementManager {
-    return this.elementManager;
+  isPointerOverUI(screenX: number, screenY: number): boolean {
+    return this.hud.containsScreenPoint(screenX, screenY);
   }
 
-  /**
-   * InteractionSystem의 선택 변경 콜백을 설정합니다.
-   */
-  setOnSelectionChange(callback: (elementId: string | null) => void): void {
-    this.interactionSystem.onSelectionChange = callback;
-  }
-
-  /**
-   * InteractionSystem의 요소 업데이트 콜백을 설정합니다.
-   */
-  setOnElementUpdate(callback: (elementId: string) => void): void {
-    this.interactionSystem.onElementUpdate = callback;
-  }
-
-  /**
-   * 맵 데이터를 다시 로드하여 모든 렌더러를 재구성합니다.
-   */
   rebuildFromMapData(): void {
+    const selectedId = editorState.selectedId;
     this.elementManager.rebuildAll();
+    if (selectedId && this.elementManager.getRenderer(selectedId)) {
+      this.elementManager.selectElement(selectedId);
+    }
     this.boundsOverlay.redraw(editorState.mapData);
     this.updateOverlays();
+    this.hud.refreshAll();
   }
 
   // ─── Private ───
@@ -111,6 +111,7 @@ export class EditorScene extends Phaser.Scene {
     const zoom = this.cameras.main.zoom;
     this.gridOverlay.redraw(zoom);
     this.boundsOverlay.redraw(editorState.mapData);
+    this.hud.refreshStatus();
   }
 
   /**
@@ -122,11 +123,17 @@ export class EditorScene extends Phaser.Scene {
     this.input.on(
       "wheel",
       (
-        _pointer: Phaser.Input.Pointer,
+        pointer: Phaser.Input.Pointer,
         _gameObjects: Phaser.GameObjects.GameObject[],
         _deltaX: number,
         deltaY: number,
       ) => {
+        if (this.hud.handleWheel(pointer.x, pointer.y, deltaY)) {
+          return;
+        }
+        if (this.isPointerOverUI(pointer.x, pointer.y)) {
+          return;
+        }
         this.handleZoom(deltaY);
       },
     );
@@ -139,6 +146,27 @@ export class EditorScene extends Phaser.Scene {
     // 키보드 — Home 키로 카메라 리셋
     this.input.keyboard?.on("keydown-HOME", () => {
       this.centerCamera();
+      this.updateOverlays();
+    });
+
+    this.interactionSystem.onSelectionChange = () => {
+      this.hud.refreshProperties();
+      this.hud.refreshStatus();
+    };
+    this.interactionSystem.onElementUpdate = (elementId) => {
+      this.handleElementEdited(elementId);
+    };
+    this.interactionSystem.onExportRequested = () => {
+      downloadMapFile(editorState.mapData);
+    };
+    this.interactionSystem.onImportRequested = () => {
+      void this.handleImportRequested();
+    };
+  }
+
+  private setupResizeListener(): void {
+    this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
+      this.hud.layout(gameSize.width, gameSize.height);
       this.updateOverlays();
     });
   }
@@ -197,5 +225,125 @@ export class EditorScene extends Phaser.Scene {
     this.lastScrollX = camera.scrollX;
     this.lastScrollY = camera.scrollY;
     this.lastZoom = 1;
+  }
+
+  private handleElementEdited(elementId: string): void {
+    const renderer = this.elementManager.getRenderer(elementId);
+    renderer?.updateFromData();
+    if (editorState.selectedId === elementId) {
+      this.elementManager.selectElement(elementId);
+    }
+    this.hud.refreshProperties();
+    this.hud.refreshStatus();
+  }
+
+  private handleMapMetadataEdited(): void {
+    this.updateOverlays();
+    this.hud.refreshAll();
+  }
+
+  private handleDeleteSelected(): void {
+    const selectedId = editorState.selectedId;
+    if (!selectedId) {
+      return;
+    }
+
+    this.elementManager.removeElement(selectedId);
+    this.hud.refreshAll();
+  }
+
+  private async handleImportRequested(): Promise<void> {
+    try {
+      const data = await loadMapFromFile();
+      this.loadMapData(data);
+    } catch (error) {
+      console.error("맵 가져오기 실패:", error);
+    }
+  }
+
+  private loadMapData(data: typeof editorState.mapData): void {
+    editorState.loadMap(data);
+    this.rebuildFromMapData();
+    this.centerCamera();
+    this.updateOverlays();
+    this.hud.refreshAll();
+  }
+
+  private setupFileDropListeners(): void {
+    let dragDepth = 0;
+
+    const hasFiles = (event: DragEvent): boolean =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+    const onDragEnter = (event: DragEvent): void => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepth += 1;
+      this.hud.setDropActive(true);
+    };
+
+    const onDragOver = (event: DragEvent): void => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+      this.hud.setDropActive(true);
+    };
+
+    const onDragLeave = (event: DragEvent): void => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) {
+        this.hud.setDropActive(false);
+      }
+    };
+
+    const onDrop = async (event: DragEvent): Promise<void> => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepth = 0;
+      this.hud.setDropActive(false);
+
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      try {
+        const data = await loadMapFromFileObject(file);
+        this.loadMapData(data);
+      } catch (error) {
+        console.error("드래그앤드롭 가져오기 실패:", error);
+      }
+    };
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+
+    this.removeFileDropListeners = () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.removeFileDropListeners?.();
+      this.removeFileDropListeners = null;
+      this.interactionSystem.destroy();
+      this.hud.destroy();
+    });
   }
 }

@@ -82,7 +82,7 @@ class EditorStateImpl {
   mapData: MapData = createEmptyMap();
   selectedId: string | null = null;
   activeTool: ToolType = "select";
-  gridSize = 16;
+  gridSize = 40;
   snapEnabled = true;
   zoom = 1;
 

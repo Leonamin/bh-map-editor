@@ -8,7 +8,14 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3100,
-    open: true,
+    host: "0.0.0.0",
+    port: 3217,
+    strictPort: false,
+    open: false,
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: 4217,
+    strictPort: false,
   },
 });

@@ -3,6 +3,7 @@ import { editorState } from "@/state/EditorState";
 import { ElementManager } from "./ElementManager";
 import { EditorElementRenderer } from "@/objects/EditorElementRenderer";
 import { EDITOR_CONFIG } from "@/config";
+import { isModKey } from "@/utils/platform";
 import type {
   ElementType,
   Floor,
@@ -54,6 +55,8 @@ export class InteractionSystem {
   // ─── Callbacks ───
   onSelectionChange?: (elementId: string | null) => void;
   onElementUpdate?: (elementId: string) => void;
+  onExportRequested?: () => void;
+  onImportRequested?: () => void;
 
   constructor(scene: Phaser.Scene, elementManager: ElementManager) {
     this.scene = scene;
@@ -68,6 +71,13 @@ export class InteractionSystem {
     this.scene.input.on(
       "pointerdown",
       (pointer: Phaser.Input.Pointer) => {
+        const uiAwareScene = this.scene as Phaser.Scene & {
+          isPointerOverUI?: (x: number, y: number) => boolean;
+        };
+        if (uiAwareScene.isPointerOverUI?.(pointer.x, pointer.y)) {
+          return;
+        }
+
         const worldX = pointer.worldX;
         const worldY = pointer.worldY;
 
@@ -144,7 +154,43 @@ export class InteractionSystem {
       this.cleanupPlacingPreview();
       this.state = "idle";
     });
+
+    // ─── DOM Keyboard (modifier combos — cross-platform) ───
+    // Phaser는 Ctrl/Cmd 조합키를 처리하지 못하므로 DOM 이벤트 사용.
+    // Mac: Cmd+S/Cmd+O, Windows/Linux: Ctrl+S/Ctrl+O
+    const domHandler = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + S → Export
+      if (isModKey(e) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        this.onExportRequested?.();
+        return;
+      }
+      // Ctrl/Cmd + O → Import
+      if (isModKey(e) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        this.onImportRequested?.();
+        return;
+      }
+    };
+    this.scene.game.canvas.addEventListener("keydown", domHandler);
+    // cleanup용 저장 (scene shutdown에서 제거 가능하도록)
+    this._domKeydownHandler = domHandler;
   }
+
+  /**
+   * Scene shutdown 시 DOM 리스너를 정리합니다.
+   * EditorScene.events(SHUTDOWN)에서 호출합니다.
+   */
+  destroy(): void {
+    if (this._domKeydownHandler) {
+      this.scene.game.canvas.removeEventListener("keydown", this._domKeydownHandler);
+      this._domKeydownHandler = null;
+    }
+    this.cleanupPlacingPreview();
+  }
+
+  /** DOM keydown 리스너 참조 (cleanup용) */
+  private _domKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // ─── Select tool: pointer down ───
 

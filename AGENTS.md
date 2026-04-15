@@ -10,16 +10,22 @@
 
 ## 2. 작업 시작 전 점검
 
-1. 현재 스펙 문서 확인: `docs/mini-spec-v1.md`, `docs/architecture.md`
+1. 아키텍처 문서 확인: `docs/architecture.md`
 2. 맵 데이터 포맷: `battle-hamsters/docs/technical/data-formats.md` 참조
 3. 맵 설계 원칙: `battle-hamsters/docs/game-design/map-design.md` 참조
 
-## 3. 기술 스택
+## 3. 핵심 원칙
 
-- Phaser 3.80, Vite 5, TypeScript 5.4
-- React/Vue 등 DOM 프레임워크 사용 금지
-- 모든 UI는 Phaser GameObjects로 구현
-- 본게임(`battle-hamsters`)과 동일한 기술 스택 유지
+1. **게임과 동일한 렌더링** — Phaser 3 + Vite + TypeScript
+2. **맵 JSON 완전 호환** — 본게임 포맷 준수, 에디터 전용 필드 금지
+3. **순수 Phaser UI** — DOM 프레임워크 없이 Phaser GameObjects로 구현 (파일 선택만 예외)
+4. **단일 씬 구조** — EditorScene 하나에 모든 기능
+5. **단순함 우선** — undo/redo, 멀티 선택 등은 후순위
+
+### 의사결정 기록
+
+- **ADR-1**: DOM 오버레이 → Phaser HUD 전환. `prompt()` 다이얼로그로 속성 편집.
+- **ADR-2**: 렌더러 팩토리 — RectElementRenderer(사각형 5종) + PointElementRenderer(포인트 3종).
 
 ## 4. 맵 JSON 호환성
 

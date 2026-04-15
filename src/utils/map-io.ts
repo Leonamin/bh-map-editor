@@ -64,6 +64,23 @@ export function loadMapFromFile(): Promise<MapData> {
   });
 }
 
+export function loadMapFromFileObject(file: File): Promise<MapData> {
+  return new Promise<MapData>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(loadMapFromJson(reader.result as string));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => {
+      reject(new Error("파일을 읽는 중 오류가 발생했습니다."));
+    };
+    reader.readAsText(file);
+  });
+}
+
 /** MapData에 필수로 있어야 하는 최상위 키 목록 */
 const REQUIRED_KEYS: (keyof MapData)[] = [
   "version",
