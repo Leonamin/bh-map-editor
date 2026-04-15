@@ -6,6 +6,7 @@ import { BoundsOverlay } from "@/objects/BoundsOverlay";
 import { ElementManager } from "@/systems/ElementManager";
 import { InteractionSystem } from "@/systems/InteractionSystem";
 import { EditorHud } from "@/ui/EditorHud";
+import { ToastManager } from "@/ui/ToastManager";
 import { loadMapFromFile, loadMapFromFileObject, downloadMapFile } from "@/utils/map-io";
 
 export class EditorScene extends Phaser.Scene {
@@ -14,6 +15,7 @@ export class EditorScene extends Phaser.Scene {
   private elementManager!: ElementManager;
   private interactionSystem!: InteractionSystem;
   private hud!: EditorHud;
+  private toastManager!: ToastManager;
   private removeFileDropListeners: (() => void) | null = null;
 
   // Track last camera state for dirty checking
@@ -57,6 +59,14 @@ export class EditorScene extends Phaser.Scene {
         this.hud.refreshAll();
       },
     });
+
+    // 토스트 매니저 생성
+    this.toastManager = new ToastManager(this);
+
+    // 인터랙션 시스템에 토스트 콜백 연결
+    this.interactionSystem.onToastMessage = (message: string) => {
+      this.toastManager.info(message);
+    };
 
     // 초기 렌더링
     this.updateOverlays();
@@ -167,6 +177,7 @@ export class EditorScene extends Phaser.Scene {
   private setupResizeListener(): void {
     this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
       this.hud.layout(gameSize.width, gameSize.height);
+      this.toastManager.relayout();
       this.updateOverlays();
     });
   }
@@ -343,6 +354,7 @@ export class EditorScene extends Phaser.Scene {
       this.removeFileDropListeners?.();
       this.removeFileDropListeners = null;
       this.interactionSystem.destroy();
+      this.toastManager.destroy();
       this.hud.destroy();
     });
   }

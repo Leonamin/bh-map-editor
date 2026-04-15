@@ -207,7 +207,10 @@ export class InteractionSystem {
 
   private handleUndo(): void {
     const cmd = editorState.undo();
-    if (!cmd) return;
+    if (!cmd) {
+      this.onToastMessage?.("실행 취소할 작업이 없습니다");
+      return;
+    }
 
     // Rebuild renderers to match state
     this.elementManager.rebuildAll();
@@ -228,13 +231,17 @@ export class InteractionSystem {
 
     // Always refresh UI
     this.onSelectionChange?.(editorState.selectedId);
+    this.onToastMessage?.(`실행 취소: ${cmd.type}`);
   }
 
   // ─── UX-1: Redo ───
 
   private handleRedo(): void {
     const cmd = editorState.redo();
-    if (!cmd) return;
+    if (!cmd) {
+      this.onToastMessage?.("다시 실행할 작업이 없습니다");
+      return;
+    }
 
     // Rebuild renderers to match state
     this.elementManager.rebuildAll();
@@ -252,13 +259,17 @@ export class InteractionSystem {
     }
 
     this.onSelectionChange?.(editorState.selectedId);
+    this.onToastMessage?.(`다시 실행: ${cmd.type}`);
   }
 
   // ─── UX-2: Duplicate ───
 
   private handleDuplicate(): void {
     const selected = editorState.getSelectedElement();
-    if (!selected) return;
+    if (!selected) {
+      this.onToastMessage?.("복제할 요소를 먼저 선택하세요");
+      return;
+    }
 
     // Deep clone the element data
     const cloned = JSON.parse(JSON.stringify(selected)) as EditableElement;
@@ -282,6 +293,7 @@ export class InteractionSystem {
     this.elementManager.selectElement(newId);
     this.onSelectionChange?.(newId);
     this.onElementUpdate?.(newId);
+    this.onToastMessage?.(`요소 복제됨: ${newId}`);
   }
 
   private detectElementType(el: EditableElement): ElementType {
