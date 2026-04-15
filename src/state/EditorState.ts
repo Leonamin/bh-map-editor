@@ -27,6 +27,21 @@ type ElementArrayHolder = Pick<
   "collision" | "hazards" | "spawnPoints" | "weaponSpawns" | "itemSpawns"
 >;
 
+// ─── Undo/Redo ───
+
+export interface EditorCommand {
+  type: "add" | "remove" | "update" | "metadata";
+  elementId?: string;
+  before: unknown;
+  after: unknown;
+}
+
+const MAX_UNDO_STACK = 50;
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
 /**
  * EditableElement에서 ElementType을 감지합니다.
  * SpawnPoint는 type 필드가 없으므로 별도 검사가 필요합니다.
@@ -88,18 +103,40 @@ class EditorStateImpl {
 
   private idCounters: Record<string, number> = {};
 
+  // ─── Undo/Redo ───
+  undoStack: EditorCommand[] = [];
+  redoStack: EditorCommand[] = [];
+
   // ─── Element CRUD ───
 
   addElement(element: EditableElement): void {
     const elementType = detectElementType(element);
     const arr = getArrayForType(this.mapData, elementType);
     arr.push(element);
+
+    // UX-1: Push undo command
+    this.pushCommand({
+      type: "add",
+      elementId: element.id,
+      before: null,
+      after: deepClone(element),
+    });
   }
 
   removeElement(id: string): void {
     for (const arr of getAllElementArrays(this.mapData)) {
       const idx = arr.findIndex((el) => el.id === id);
       if (idx !== -1) {
+        const removed = arr[idx];
+
+        // UX-1: Push undo command
+        this.pushCommand({
+          type: "remove",
+          elementId: id,
+          before: deepClone(removed),
+          after: null,
+        });
+
         arr.splice(idx, 1);
         // 선택된 요소가 삭제된 경우 선택 해제
         if (this.selectedId === id) {
@@ -113,7 +150,17 @@ class EditorStateImpl {
   updateElement(id: string, updates: Partial<EditableElement>): void {
     const el = this.findElement(id);
     if (el) {
+      const before = deepClone(el);
       Object.assign(el, updates);
+      const after = deepClone(el);
+
+      // UX-1: Push undo command
+      this.pushCommand({
+        type: "update",
+        elementId: id,
+        before,
+        after,
+      });
     }
   }
 
@@ -149,7 +196,22 @@ class EditorStateImpl {
   // ─── Map metadata ───
 
   updateMapMetadata(updates: Partial<MapData>): void {
+    // Collect previous values for the keys being updated
+    const previousValues: Record<string, unknown> = {};
+    for (const key of Object.keys(updates)) {
+      (previousValues as Record<string, unknown>)[key] = deepClone(
+        (this.mapData as unknown as Record<string, unknown>)[key],
+      );
+    }
+
     Object.assign(this.mapData, updates);
+
+    // UX-1: Push undo command
+    this.pushCommand({
+      type: "metadata",
+      before: previousValues,
+      after: deepClone(updates),
+    });
   }
 
   // ─── Reset / Load ───
@@ -159,6 +221,7 @@ class EditorStateImpl {
     this.selectedId = null;
     this.activeTool = "select";
     this.rebuildIdCounters();
+    this.clearHistory();
   }
 
   reset(): void {
@@ -167,6 +230,7 @@ class EditorStateImpl {
     this.activeTool = "select";
     this.zoom = 1;
     this.idCounters = {};
+    this.clearHistory();
   }
 
   // ─── ID generation ───
@@ -176,6 +240,136 @@ class EditorStateImpl {
     const current = this.idCounters[prefix] ?? 1;
     this.idCounters[prefix] = current + 1;
     return `${prefix}_${current}`;
+  }
+
+  // ─── Undo/Redo ───
+
+  private pushCommand(cmd: EditorCommand): void {
+    this.undoStack.push(cmd);
+    if (this.undoStack.length > MAX_UNDO_STACK) {
+      this.undoStack.shift();
+    }
+    // Clear redo stack on new action
+    this.redoStack = [];
+  }
+
+  undo(): EditorCommand | null {
+    const cmd = this.undoStack.pop();
+    if (!cmd) return null;
+
+    // Restore previous state
+    switch (cmd.type) {
+      case "add": {
+        // Undo add → remove the element
+        if (cmd.elementId) {
+          for (const arr of getAllElementArrays(this.mapData)) {
+            const idx = arr.findIndex((el) => el.id === cmd.elementId);
+            if (idx !== -1) {
+              arr.splice(idx, 1);
+              break;
+            }
+          }
+          if (this.selectedId === cmd.elementId) {
+            this.selectedId = null;
+          }
+        }
+        break;
+      }
+      case "remove": {
+        // Undo remove → re-add the element
+        if (cmd.before && typeof cmd.before === "object") {
+          const element = cmd.before as EditableElement;
+          const elementType = detectElementType(element);
+          const arr = getArrayForType(this.mapData, elementType);
+          arr.push(element);
+        }
+        break;
+      }
+      case "update": {
+        // Undo update → restore before state
+        if (cmd.elementId && cmd.before) {
+          const el = this.findElement(cmd.elementId);
+          if (el) {
+            Object.keys(cmd.before as Record<string, unknown>).forEach((key) => {
+              (el as unknown as Record<string, unknown>)[key] = (cmd.before as Record<string, unknown>)[key];
+            });
+          }
+        }
+        break;
+      }
+      case "metadata": {
+        // Undo metadata → restore previous values
+        if (cmd.before) {
+          Object.assign(this.mapData, cmd.before);
+        }
+        break;
+      }
+    }
+
+    this.redoStack.push(cmd);
+    return cmd;
+  }
+
+  redo(): EditorCommand | null {
+    const cmd = this.redoStack.pop();
+    if (!cmd) return null;
+
+    // Re-apply the command
+    switch (cmd.type) {
+      case "add": {
+        // Redo add → re-add the element
+        if (cmd.after && typeof cmd.after === "object") {
+          const element = cmd.after as EditableElement;
+          const elementType = detectElementType(element);
+          const arr = getArrayForType(this.mapData, elementType);
+          arr.push(element);
+        }
+        break;
+      }
+      case "remove": {
+        // Redo remove → remove the element again
+        if (cmd.elementId) {
+          for (const arr of getAllElementArrays(this.mapData)) {
+            const idx = arr.findIndex((el) => el.id === cmd.elementId);
+            if (idx !== -1) {
+              arr.splice(idx, 1);
+              break;
+            }
+          }
+          if (this.selectedId === cmd.elementId) {
+            this.selectedId = null;
+          }
+        }
+        break;
+      }
+      case "update": {
+        // Redo update → apply after state
+        if (cmd.elementId && cmd.after) {
+          const el = this.findElement(cmd.elementId);
+          if (el) {
+            Object.keys(cmd.after as Record<string, unknown>).forEach((key) => {
+              (el as unknown as Record<string, unknown>)[key] = (cmd.after as Record<string, unknown>)[key];
+            });
+          }
+        }
+        break;
+      }
+      case "metadata": {
+        // Redo metadata → apply after values
+        if (cmd.after) {
+          Object.assign(this.mapData, cmd.after);
+        }
+        break;
+      }
+    }
+
+    this.undoStack.push(cmd);
+    return cmd;
+  }
+
+  clearHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
   }
 
   // ─── Internal helpers ───
