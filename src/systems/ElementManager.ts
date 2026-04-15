@@ -115,7 +115,7 @@ export class ElementManager {
           respawnMs: 10000,
           despawnAfterMs: 0,
           spawnStyle: "fade_in",
-          despawnStyle: "fade_out",
+          despawnStyle: "shrink_pop",
           mode: "fixed",
         } as WeaponSpawn;
         break;
@@ -158,12 +158,29 @@ export class ElementManager {
 
   /**
    * ID로 요소를 제거합니다. 렌더러와 editorState 모두에서 삭제합니다.
+   * UX-3: 빨간 플래시 피드백 후 200ms 뒤 삭제합니다.
    */
   removeElement(id: string): void {
     const renderer = this.renderers.get(id);
     if (renderer) {
-      renderer.destroy();
+      // UX-3: Flash red before destroying
+      const bounds = renderer.getElementBounds();
+      const flash = this.scene.add.graphics();
+      flash.setDepth(1001);
+      flash.fillStyle(0xff0000, 0.5);
+      flash.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+
+      // Destroy renderer immediately (hide it)
+      renderer.setVisible(false);
+
+      // Remove from map
       this.renderers.delete(id);
+
+      // Destroy flash and renderer after 200ms
+      this.scene.time.delayedCall(200, () => {
+        flash.destroy();
+        renderer.destroy();
+      });
     }
     editorState.removeElement(id);
   }

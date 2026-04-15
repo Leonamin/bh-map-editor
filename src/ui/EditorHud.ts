@@ -306,16 +306,33 @@ export class EditorHud {
   }
 
   refreshStatus(): void {
-    const count =
-      editorState.mapData.collision.length +
-      editorState.mapData.hazards.length +
-      editorState.mapData.spawnPoints.length +
-      editorState.mapData.weaponSpawns.length +
-      editorState.mapData.itemSpawns.length;
     const mod = modKeyLabel();
 
+    // UX-5d: Per-type element counts
+    const f = editorState.mapData.collision.filter((e) => e.type === "floor").length;
+    const pl = editorState.mapData.collision.filter((e) => e.type === "one_way_platform").length;
+    const w = editorState.mapData.collision.filter((e) => e.type === "solid_wall").length;
+    const fz = editorState.mapData.hazards.filter((e) => e.type === "fall_zone").length;
+    const k = editorState.mapData.hazards.filter((e) => e.type === "instant_kill_hazard").length;
+    const sp = editorState.mapData.spawnPoints.length;
+    const wp = editorState.mapData.weaponSpawns.length;
+    const it = editorState.mapData.itemSpawns.length;
+    const total = f + pl + w + fz + k + sp + wp + it;
+
+    const countParts: string[] = [];
+    if (f) countParts.push(`Floor:${f}`);
+    if (pl) countParts.push(`Plat:${pl}`);
+    if (w) countParts.push(`Wall:${w}`);
+    if (fz) countParts.push(`Fall:${fz}`);
+    if (k) countParts.push(`Kill:${k}`);
+    if (sp) countParts.push(`Spawn:${sp}`);
+    if (wp) countParts.push(`Weapon:${wp}`);
+    if (it) countParts.push(`Item:${it}`);
+    const countStr = countParts.length > 0 ? countParts.join(" ") : "none";
+
+    // UX-5a: Updated shortcut hints with undo/redo/duplicate
     this.statusText.setText(
-      `Elements ${count}   Zoom ${Math.round(editorState.zoom * 100)}%   Grid ${editorState.gridSize}   Snap ${editorState.snapEnabled ? "ON" : "OFF"}   |  ${mod}+S Export  ${mod}+O Import  Del Delete  Esc Cancel  Home Reset`,
+      `${total} (${countStr})  Zoom ${Math.round(editorState.zoom * 100)}%  Grid ${editorState.gridSize}  Snap ${editorState.snapEnabled ? "ON" : "OFF"}  |  ${mod}+Z Undo  ${mod}+⇧+Z Redo  ${mod}+D Dup  Del Delete  Esc  Home`,
     );
   }
 

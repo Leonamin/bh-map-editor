@@ -1,143 +1,51 @@
-// ─── Battle Hamsters 맵 데이터 타입 정의 ───
-// data-formats.md 및 training-arena.json 포맷과 완전 호환
+// ─── Battle Hamsters 맵 에디터 타입 ───
+// 핵심 맵 타입은 @battle-hamsters/shared에서 가져오고,
+// 에디터 전용 헬퍼 타입만 여기에 정의한다.
 
-// ─── 공통 ───
+// shared에서 원본 타입 re-export (에디터 친화적 별칭)
+export type {
+  MapDefinition as MapData,
+  CollisionPrimitive as CollisionElement,
+  FloorCollisionPrimitive as Floor,
+  OneWayPlatformCollisionPrimitive as OneWayPlatform,
+  SolidWallCollisionPrimitive as SolidWall,
+  HazardZone as HazardElement,
+  FallZoneHazard as FallZone,
+  InstantKillHazard,
+  SpawnPoint,
+  WeaponSpawnPoint as WeaponSpawn,
+  ItemSpawnPoint as ItemSpawn,
+  BoundsRect as Bounds,
+  BoundaryPolicy,
+  CameraPolicy,
+  SpawnStyle,
+} from "@battle-hamsters/shared";
 
-/** 직사각형 경계 */
-export interface Bounds {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
+// 에디터에서 사용하는 shared 타입 직접 import
+import type { CollisionPrimitive } from "@battle-hamsters/shared";
+import type { HazardZone } from "@battle-hamsters/shared";
+import type { SpawnPoint } from "@battle-hamsters/shared";
+import type { WeaponSpawnPoint } from "@battle-hamsters/shared";
+import type { ItemSpawnPoint } from "@battle-hamsters/shared";
 
-/** 맵 크기 */
+/** 맵 크기 — shared에는 {width, height}가 inline이어서 별도 정의 */
 export interface MapSize {
   width: number;
   height: number;
 }
 
-// ─── Collision primitives ───
-
-export interface Floor {
-  id: string;
-  type: "floor";
-  leftX: number;
-  rightX: number;
-  topY: number;
-}
-
-export interface OneWayPlatform {
-  id: string;
-  type: "one_way_platform";
-  leftX: number;
-  rightX: number;
-  topY: number;
-}
-
-export interface SolidWall {
-  id: string;
-  type: "solid_wall";
-  x: number;
-  topY: number;
-  bottomY: number;
-}
-
-/** 충돌 요소 유니온 */
-export type CollisionElement = Floor | OneWayPlatform | SolidWall;
-
-// ─── Hazards ───
-
-export interface FallZone {
-  id: string;
-  type: "fall_zone";
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface InstantKillHazard {
-  id: string;
-  type: "instant_kill_hazard";
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/** 위험 요소 유니온 */
-export type HazardElement = FallZone | InstantKillHazard;
-
-// ─── Spawn / Item / Weapon ───
-
-export interface SpawnPoint {
-  id: string;
-  x: number;
-  y: number;
-}
-
-export type SpawnStyle = "airdrop" | "fade_in" | "triggered";
-
+/** spawnStyle + mode 조합 타입 */
 export type SpawnMode = "fixed" | "random_candidates";
-
-export interface WeaponSpawn {
-  id: string;
-  weaponId: string;
-  x: number;
-  y: number;
-  respawnMs: number;
-  despawnAfterMs: number;
-  spawnStyle: SpawnStyle;
-  despawnStyle: string;
-  mode: SpawnMode;
-  spawnGroupId?: string;
-}
-
-export interface ItemSpawn {
-  id: string;
-  itemId: string;
-  x: number;
-  y: number;
-  respawnMs: number;
-  spawnStyle: SpawnStyle;
-  mode: SpawnMode;
-  spawnGroupId?: string;
-}
-
-// ─── Full map data ───
-
-export type BoundaryPolicy = "closed" | "open";
-export type CameraPolicy = "static" | "follow" | "dynamic";
-
-export interface MapData {
-  version: number;
-  id: string;
-  name: string;
-  size: MapSize;
-  boundaryPolicy: BoundaryPolicy;
-  cameraPolicy: CameraPolicy;
-  visualBounds: Bounds;
-  gameplayBounds: Bounds;
-  deathBounds: Bounds;
-  spawnPoints: SpawnPoint[];
-  collision: CollisionElement[];
-  hazards: HazardElement[];
-  weaponSpawns: WeaponSpawn[];
-  itemSpawns: ItemSpawn[];
-  terrain: unknown[];
-  decorations: unknown[];
-}
 
 // ─── 편집기 헬퍼 타입 ───
 
 /** 에디터에서 편집 가능한 모든 요소 유니온 */
 export type EditableElement =
-  | CollisionElement
-  | HazardElement
+  | CollisionPrimitive
+  | HazardZone
   | SpawnPoint
-  | WeaponSpawn
-  | ItemSpawn;
+  | WeaponSpawnPoint
+  | ItemSpawnPoint;
 
 /** 요소 타입 식별자 문자열 리터럴 유니온 */
 export type ElementType =

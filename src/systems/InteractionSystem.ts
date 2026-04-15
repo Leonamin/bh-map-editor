@@ -11,6 +11,7 @@ import type {
   SolidWall,
   FallZone,
   InstantKillHazard,
+  EditableElement,
 } from "@/types/map";
 
 type InteractionState = "idle" | "placing" | "dragging" | "resizing" | "panning";
@@ -57,6 +58,7 @@ export class InteractionSystem {
   onElementUpdate?: (elementId: string) => void;
   onExportRequested?: () => void;
   onImportRequested?: () => void;
+  onToastMessage?: (message: string) => void;
 
   constructor(scene: Phaser.Scene, elementManager: ElementManager) {
     this.scene = scene;
@@ -140,8 +142,10 @@ export class InteractionSystem {
     // ─── Keyboard ───
     this.scene.input.keyboard?.on("keydown-DELETE", () => {
       if (editorState.selectedId) {
-        this.elementManager.removeElement(editorState.selectedId);
+        const deletedId = editorState.selectedId;
+        this.elementManager.removeElement(deletedId);
         this.onSelectionChange?.(null);
+        this.onToastMessage?.(`요소 삭제됨: ${deletedId}`);
       }
     });
 
@@ -171,10 +175,173 @@ export class InteractionSystem {
         this.onImportRequested?.();
         return;
       }
+
+      // UX-1: Ctrl+Z → Undo
+      if (isModKey(e) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        this.handleUndo();
+        return;
+      }
+
+      // UX-1: Ctrl+Shift+Z or Ctrl+Y → Redo
+      if (
+        (isModKey(e) && e.shiftKey && e.key.toLowerCase() === "z") ||
+        (isModKey(e) && e.key.toLowerCase() === "y")
+      ) {
+        e.preventDefault();
+        this.handleRedo();
+        return;
+      }
+
+      // UX-2: Ctrl+D → Duplicate selected element
+      if (isModKey(e) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        this.handleDuplicate();
+        return;
+      }
     };
     this.scene.game.canvas.addEventListener("keydown", domHandler);
     // cleanup용 저장 (scene shutdown에서 제거 가능하도록)
     this._domKeydownHandler = domHandler;
+  }
+
+  // ─── UX-1: Undo ───
+
+  private handleUndo(): void {
+    const cmd = editorState.undo();
+    if (!cmd) {
+      this.onToastMessage?.("실행 취소할 작업이 없습니다");
+      return;
+    }
+
+    // Rebuild renderers to match state
+    this.elementManager.rebuildAll();
+
+    // If the command involved an element, refresh selection and update
+    if (cmd.elementId) {
+      const el = editorState.findElement(cmd.elementId);
+      if (el) {
+        this.elementManager.selectElement(cmd.elementId);
+        this.onSelectionChange?.(cmd.elementId);
+        this.onElementUpdate?.(cmd.elementId);
+      } else {
+        // Element was removed by undo
+        editorState.selectElement(null);
+        this.onSelectionChange?.(null);
+      }
+    }
+
+    // Always refresh UI
+    this.onSelectionChange?.(editorState.selectedId);
+    this.onToastMessage?.(`실행 취소: ${cmd.type}`);
+  }
+
+  // ─── UX-1: Redo ───
+
+  private handleRedo(): void {
+    const cmd = editorState.redo();
+    if (!cmd) {
+      this.onToastMessage?.("다시 실행할 작업이 없습니다");
+      return;
+    }
+
+    // Rebuild renderers to match state
+    this.elementManager.rebuildAll();
+
+    if (cmd.elementId) {
+      const el = editorState.findElement(cmd.elementId);
+      if (el) {
+        this.elementManager.selectElement(cmd.elementId);
+        this.onSelectionChange?.(cmd.elementId);
+        this.onElementUpdate?.(cmd.elementId);
+      } else {
+        editorState.selectElement(null);
+        this.onSelectionChange?.(null);
+      }
+    }
+
+    this.onSelectionChange?.(editorState.selectedId);
+    this.onToastMessage?.(`다시 실행: ${cmd.type}`);
+  }
+
+  // ─── UX-2: Duplicate ───
+
+  private handleDuplicate(): void {
+    const selected = editorState.getSelectedElement();
+    if (!selected) {
+      this.onToastMessage?.("복제할 요소를 먼저 선택하세요");
+      return;
+    }
+
+    // Deep clone the element data
+    const cloned = JSON.parse(JSON.stringify(selected)) as EditableElement;
+
+    // Detect element type and generate new ID
+    const elementType = this.detectElementType(cloned);
+    const newId = editorState.generateId(elementType);
+    (cloned as unknown as Record<string, unknown>).id = newId;
+
+    // Offset position by gridSize
+    const gridSize = editorState.gridSize;
+    this.offsetElementPosition(cloned, elementType, gridSize);
+
+    // Add to state (this pushes to undo stack)
+    editorState.addElement(cloned);
+
+    // Create renderer for the new element
+    this.elementManager.addRenderer(cloned);
+
+    // Select the new element
+    this.elementManager.selectElement(newId);
+    this.onSelectionChange?.(newId);
+    this.onElementUpdate?.(newId);
+    this.onToastMessage?.(`요소 복제됨: ${newId}`);
+  }
+
+  private detectElementType(el: EditableElement): ElementType {
+    if ("type" in el) {
+      return (el as { type: ElementType }).type;
+    }
+    return "spawn_point";
+  }
+
+  private offsetElementPosition(
+    el: EditableElement,
+    type: ElementType,
+    offset: number,
+  ): void {
+    switch (type) {
+      case "floor":
+      case "one_way_platform": {
+        const d = el as unknown as { leftX: number; rightX: number; topY: number };
+        d.leftX += offset;
+        d.rightX += offset;
+        d.topY += offset;
+        break;
+      }
+      case "solid_wall": {
+        const d = el as unknown as { x: number; topY: number; bottomY: number };
+        d.x += offset;
+        d.topY += offset;
+        d.bottomY += offset;
+        break;
+      }
+      case "fall_zone":
+      case "instant_kill_hazard": {
+        const d = el as unknown as { x: number; y: number };
+        d.x += offset;
+        d.y += offset;
+        break;
+      }
+      case "spawn_point":
+      case "weapon_spawn":
+      case "item_spawn": {
+        const d = el as unknown as { x: number; y: number };
+        d.x += offset;
+        d.y += offset;
+        break;
+      }
+    }
   }
 
   /**
