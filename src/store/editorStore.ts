@@ -67,6 +67,12 @@ interface EditorStore {
   /** 더블클릭으로 Properties 패널 포커스 요청. React가 이 값을 읽고 처리. */
   focusPropertiesRequest: number; // 타임스탬프로 매번 새 이벤트
   requestFocusProperties: () => void;
+
+  // ─── P4: 속성 인라인 편집 ───
+  /** 요소 속성 업데이트 (editorState + 렌더러 갱신) */
+  updateElement: (id: string, updates: Partial<EditableElement>) => void;
+  /** 맵 메타데이터 업데이트 */
+  updateMapMetadata: (updates: Partial<MapData>) => void;
 }
 
 function getEditorScene() {
@@ -164,5 +170,28 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   focusPropertiesRequest: 0,
   requestFocusProperties: () => {
     set({ focusPropertiesRequest: Date.now() });
+  },
+
+  // ─── P4: 속성 인라인 편집 ───
+  updateElement: (id, updates) => {
+    editorState.updateElement(id, updates);
+    // 렌더러 갱신
+    const scene = getEditorScene();
+    if (scene) {
+      const renderer = scene.elementManager?.getRenderer(id);
+      if (renderer) renderer.updateFromData();
+      scene.syncStore();
+    }
+  },
+  updateMapMetadata: (updates) => {
+    editorState.updateMapMetadata(updates);
+    const scene = getEditorScene();
+    if (scene) {
+      scene.syncStore();
+      // Bounds 오버레이도 갱신
+      if (updates.visualBounds || updates.gameplayBounds || updates.deathBounds) {
+        scene.rebuildFromMapData();
+      }
+    }
   },
 }));

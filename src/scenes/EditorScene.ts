@@ -12,7 +12,7 @@ import { loadMapFromFile, loadMapFromFileObject, downloadMapFile } from "@/utils
 export class EditorScene extends Phaser.Scene {
   private gridOverlay!: GridOverlay;
   private boundsOverlay!: BoundsOverlay;
-  private elementManager!: ElementManager;
+  elementManager!: ElementManager;
   private interactionSystem!: InteractionSystem;
   private toastManager!: ToastManager;
   private removeFileDropListeners: (() => void) | null = null;
@@ -135,7 +135,7 @@ export class EditorScene extends Phaser.Scene {
   // ─── Private ───
 
   /** editorState → Zustand 스토어 동기화 */
-  private syncStore(): void {
+  syncStore(): void {
     const store = useEditorStore.getState();
     const el = editorState.selectedId
       ? editorState.getSelectedElement() ?? null
