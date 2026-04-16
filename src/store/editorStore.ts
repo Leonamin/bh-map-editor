@@ -62,6 +62,11 @@ interface EditorStore {
   triggerDeleteSelected: () => void;
   toggleGrid: () => void;
   toggleSnap: () => void;
+
+  // ─── P3: 상호작용 개선 ───
+  /** 더블클릭으로 Properties 패널 포커스 요청. React가 이 값을 읽고 처리. */
+  focusPropertiesRequest: number; // 타임스탬프로 매번 새 이벤트
+  requestFocusProperties: () => void;
 }
 
 function getEditorScene() {
@@ -153,5 +158,11 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const current = get().snapEnabled;
     editorState.snapEnabled = !current;
     set({ snapEnabled: !current });
+  },
+
+  // ─── P3: 상호작용 개선 ───
+  focusPropertiesRequest: 0,
+  requestFocusProperties: () => {
+    set({ focusPropertiesRequest: Date.now() });
   },
 }));
