@@ -69,6 +69,9 @@ export class EditorScene extends Phaser.Scene {
 
     // 초기 Zustand 스토어 동기화
     this.syncStore();
+
+    // React 컴포넌트에서 접근할 수 있도록 씬 레퍼런스 노출 (P2)
+    (window as any).__editorScene = this;
   }
 
   update(): void {
@@ -102,6 +105,31 @@ export class EditorScene extends Phaser.Scene {
     this.boundsOverlay.redraw(editorState.mapData);
     this.updateOverlays();
     this.syncStore();
+  }
+
+  /** 그리드 오버레이만 다시 그리기 (React → Phaser) */
+  rebuildGridOverlay(): void {
+    this.updateOverlays();
+  }
+
+  /** React에서 Import 버튼 클릭 시 호출 */
+  triggerImport(): void {
+    void this.handleImportRequested();
+  }
+
+  /** React에서 Export 버튼 클릭 시 호출 */
+  triggerExport(): void {
+    downloadMapFile(editorState.mapData);
+  }
+
+  /** React에서 Delete 버튼/단축키로 선택 요소 삭제 */
+  triggerDeleteSelected(): void {
+    if (!editorState.selectedId) return;
+    const deletedId = editorState.selectedId;
+    editorState.removeElement(deletedId);
+    editorState.selectElement(null);
+    this.rebuildFromMapData();
+    this.toastManager.info(`요소 삭제됨: ${deletedId}`);
   }
 
   // ─── Private ───
