@@ -4,6 +4,7 @@ import { ElementManager } from "./ElementManager";
 import { EditorElementRenderer } from "@/objects/EditorElementRenderer";
 import { EDITOR_CONFIG } from "@/config";
 import { isModKey } from "@/utils/platform";
+import { useEditorStore } from "@/store/editorStore";
 import type {
   ElementType,
   Floor,
@@ -60,6 +61,11 @@ export class InteractionSystem {
   onImportRequested?: () => void;
   onToastMessage?: (message: string) => void;
 
+  // ─── P3: 더블클릭 감지 ───
+  private lastClickTime = 0;
+  private lastClickId: string | null = null;
+  private static readonly DOUBLE_CLICK_THRESHOLD = 350; // ms
+
   constructor(scene: Phaser.Scene, elementManager: ElementManager) {
     this.scene = scene;
     this.elementManager = elementManager;
@@ -100,8 +106,21 @@ export class InteractionSystem {
 
           if (tool === "select") {
             this.handleSelectDown(worldX, worldY);
+          } else if (pointer.event?.altKey) {
+            // P3-3: Alt+클릭 임시 선택 — 도구 유지, 요소만 선택
+            const hit = this.elementManager.hitTest(worldX, worldY);
+            if (hit) {
+              this.elementManager.selectElement(hit.elementData.id);
+              this.onSelectionChange?.(hit.elementData.id);
+            }
           } else {
-            this.handlePlacementDown(worldX, worldY, tool as ElementType);
+            // P3-1: 자동 선택 분기 — 요소 위 클릭=선택, 빈 공간=배치
+            const hit = this.elementManager.hitTest(worldX, worldY);
+            if (hit) {
+              this.handleSelectDown(worldX, worldY);
+            } else {
+              this.handlePlacementDown(worldX, worldY, tool as ElementType);
+            }
           }
         }
       },
@@ -403,6 +422,22 @@ export class InteractionSystem {
     // 요소 히트 테스트
     const hit = this.elementManager.hitTest(worldX, worldY);
     if (hit) {
+      // P3-2: 더블클릭 감지 → Properties 패널 포커스 요청
+      const now = Date.now();
+      const hitId = hit.elementData.id;
+      if (
+        hitId === this.lastClickId &&
+        now - this.lastClickTime < InteractionSystem.DOUBLE_CLICK_THRESHOLD
+      ) {
+        // 더블클릭! Zustand에 포커스 요청
+        useEditorStore.getState().requestFocusProperties();
+        this.lastClickTime = 0; // 리셋 (3연속 클릭 방지)
+        this.lastClickId = null;
+      } else {
+        this.lastClickTime = now;
+        this.lastClickId = hitId;
+      }
+
       this.state = "dragging";
       this.dragRenderer = hit;
 

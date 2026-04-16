@@ -1,5 +1,6 @@
 import { useEditorStore } from "@/store/editorStore";
 import type { EditableElement, MapData } from "@/types/map";
+import { useEffect, useRef } from "react";
 
 /** 요소의 ElementType 감지 */
 function getElementType(el: EditableElement): string {
@@ -228,10 +229,25 @@ function MapMetadata({ mapData }: { mapData: MapData }) {
 }
 
 export function PropertiesPanel() {
-  const { selectedElement, mapData } = useEditorStore();
+  const { selectedElement, mapData, focusPropertiesRequest } = useEditorStore();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // P3-2: 더블클릭으로 패널 포커스
+  useEffect(() => {
+    if (focusPropertiesRequest > 0 && panelRef.current) {
+      panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      // 첫 번째 prop-row에 focus 효과
+      const firstRow = panelRef.current.querySelector(".prop-row");
+      if (firstRow) {
+        (firstRow as HTMLElement).focus();
+        firstRow.classList.add("prop-row-highlight");
+        setTimeout(() => firstRow.classList.remove("prop-row-highlight"), 1000);
+      }
+    }
+  }, [focusPropertiesRequest]);
 
   return (
-    <div className="right-panel">
+    <div className="right-panel" ref={panelRef}>
       <div className="panel-title">Properties</div>
       <div className="panel-content">
         {selectedElement ? (

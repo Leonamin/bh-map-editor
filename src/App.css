@@ -256,3 +256,15 @@ body {
   font-size: 12px;
   font-style: italic;
 }
+
+/* ─── P3-2: 더블클릭 포커스 하이라이트 ─── */
+.prop-row-highlight {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  animation: prop-flash 1s ease-out;
+}
+
+@keyframes prop-flash {
+  0% { background-color: rgba(59, 130, 246, 0.3); }
+  100% { background-color: transparent; }
+}
