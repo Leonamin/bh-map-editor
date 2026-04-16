@@ -1,4 +1,5 @@
 import { useEditorStore } from "@/store/editorStore";
+import { detectElementType } from "@/types/type-guards";
 import type {
   EditableElement,
   MapData,
@@ -8,12 +9,6 @@ import type {
 import { useEffect, useRef } from "react";
 
 // ─── Helpers ───
-
-/** 요소의 ElementType 감지 */
-function getElementType(el: EditableElement): string {
-  if ("type" in el) return (el as { type: string }).type;
-  return "spawn_point";
-}
 
 /** 타입 표시 이름 */
 const TYPE_LABELS: Record<string, string> = {
@@ -130,7 +125,7 @@ function SelectInput<T extends string>({
 /** 선택된 요소의 속성을 인라인 편집 가능하게 표시 */
 function ElementProperties({ element }: { element: EditableElement }) {
   const updateElement = useEditorStore((s) => s.updateElement);
-  const elType = getElementType(element);
+  const elType = detectElementType(element);
   const label = TYPE_LABELS[elType] ?? elType;
   const color = TYPE_COLORS[elType] ?? "transparent";
   const id = (element as { id: string }).id;
