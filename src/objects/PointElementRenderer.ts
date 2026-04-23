@@ -4,6 +4,9 @@ import type {
   ElementType,
   SpawnPoint,
 } from "@/types/map";
+import {
+  detectElementType,
+} from "@/types/type-guards";
 import { EDITOR_CONFIG } from "@/config";
 import { EditorElementRenderer } from "./EditorElementRenderer";
 
@@ -19,25 +22,8 @@ export class PointElementRenderer extends EditorElementRenderer {
 
   constructor(scene: Phaser.Scene, data: EditableElement) {
     super(scene, data);
-    this.elementType = this.detectType(data);
+    this.elementType = detectElementType(data) as PointElementType;
     this.drawShape();
-  }
-
-  // ─── Type detection ───
-
-  private detectType(data: EditableElement): PointElementType {
-    // SpawnPoint는 type 필드가 없음
-    if (!("type" in data)) {
-      return "spawn_point";
-    }
-    // WeaponSpawn과 ItemSpawn은 고유 필드로 구분
-    if ("weaponId" in data) {
-      return "weapon_spawn";
-    }
-    if ("itemId" in data) {
-      return "item_spawn";
-    }
-    return "spawn_point";
   }
 
   // ─── Position helpers ───

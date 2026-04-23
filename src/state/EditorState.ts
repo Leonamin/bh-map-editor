@@ -3,6 +3,11 @@ import type {
   EditableElement,
   ElementType,
 } from "@/types/map";
+import {
+  detectElementType,
+  getArrayForType,
+  getAllElementArrays,
+} from "@/types/type-guards";
 import { createEmptyMap } from "@/utils/map-io";
 
 // ─── ToolType ───
@@ -22,11 +27,6 @@ const TYPE_PREFIX: Record<ElementType, string> = {
   item_spawn: "item",
 };
 
-type ElementArrayHolder = Pick<
-  MapData,
-  "collision" | "hazards" | "spawnPoints" | "weaponSpawns" | "itemSpawns"
->;
-
 // ─── Undo/Redo ───
 
 export interface EditorCommand {
@@ -40,55 +40,6 @@ const MAX_UNDO_STACK = 50;
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
-}
-
-/**
- * EditableElement에서 ElementType을 감지합니다.
- * SpawnPoint는 type 필드가 없으므로 별도 검사가 필요합니다.
- */
-function detectElementType(el: EditableElement): ElementType {
-  if ("type" in el) {
-    return (el as { type: ElementType }).type;
-  }
-  // SpawnPoint: id, x, y만 있고 type 필드 없음
-  return "spawn_point";
-}
-
-/**
- * ElementType에 해당하는 MapData 내 배열을 반환합니다.
- */
-function getArrayForType(
-  data: ElementArrayHolder,
-  type: ElementType,
-): EditableElement[] {
-  switch (type) {
-    case "floor":
-    case "one_way_platform":
-    case "solid_wall":
-      return data.collision as EditableElement[];
-    case "fall_zone":
-    case "instant_kill_hazard":
-      return data.hazards as EditableElement[];
-    case "spawn_point":
-      return data.spawnPoints as EditableElement[];
-    case "weapon_spawn":
-      return data.weaponSpawns as EditableElement[];
-    case "item_spawn":
-      return data.itemSpawns as EditableElement[];
-  }
-}
-
-/**
- * MapData 내 모든 편집 가능 요소 배열을 순회할 수 있도록 반환합니다.
- */
-function getAllElementArrays(data: MapData): EditableElement[][] {
-  return [
-    data.collision as EditableElement[],
-    data.hazards as EditableElement[],
-    data.spawnPoints as EditableElement[],
-    data.weaponSpawns as EditableElement[],
-    data.itemSpawns as EditableElement[],
-  ];
 }
 
 // ─── EditorStateImpl ───

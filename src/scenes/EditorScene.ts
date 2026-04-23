@@ -8,6 +8,7 @@ import { InteractionSystem } from "@/systems/InteractionSystem";
 import { ToastManager } from "@/ui/ToastManager";
 import { useEditorStore } from "@/store/editorStore";
 import { loadMapFromFile, loadMapFromFileObject, downloadMapFile } from "@/utils/map-io";
+import { detectElementType } from "@/types/type-guards";
 
 export class EditorScene extends Phaser.Scene {
   private gridOverlay!: GridOverlay;
@@ -160,7 +161,7 @@ export class EditorScene extends Phaser.Scene {
       editorState.mapData.itemSpawns,
     ]) {
       for (const e of arr) {
-        const type = "type" in e ? (e as { type: string }).type : "spawn_point";
+        const type = detectElementType(e);
         counts[type] = (counts[type] || 0) + 1;
       }
     }

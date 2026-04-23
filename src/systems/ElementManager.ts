@@ -4,16 +4,134 @@ import { createRenderer } from "@/objects/RendererFactory";
 import type {
   EditableElement,
   ElementType,
-  Floor,
-  OneWayPlatform,
-  SolidWall,
-  FallZone,
-  InstantKillHazard,
-  SpawnPoint,
-  WeaponSpawn,
-  ItemSpawn,
 } from "@/types/map";
 import { EditorElementRenderer } from "@/objects/EditorElementRenderer";
+
+// ─── Element Defaults ───
+// 각 ElementType의 기본 필드 정의. id는 생성 시 주입.
+// positionFields는 생성 시 worldX/worldY로 덮어쓸 필드를 지정합니다.
+
+type PositionField = "x" | "y" | "leftX" | "rightX" | "topY" | "bottomY" | "width" | "height";
+
+interface ElementDefaults {
+  /** 요소에 설정할 type 필드 (SpawnPoint는 type이 없음) */
+  type?: ElementType;
+  /** 기본 필드 값 */
+  defaults: Record<string, unknown>;
+  /** worldX로 설정할 필드 */
+  xFields: PositionField[];
+  /** worldY로 설정할 필드 (또는 worldX+gridSize로 설정) */
+  yFields: PositionField[];
+  /** xFields 중 gridSize를 더해서 rightX/bottomY로 설정할 필드 */
+  xPlusGrid?: PositionField[];
+  /** yFields 중 gridSize를 더해서 bottomY로 설정할 필드 */
+  yPlusGrid?: PositionField[];
+}
+
+const ELEMENT_DEFAULTS: Record<ElementType, ElementDefaults> = {
+  floor: {
+    type: "floor",
+    defaults: {},
+    xFields: ["leftX"],
+    yFields: ["topY"],
+    xPlusGrid: ["rightX"],
+  },
+  one_way_platform: {
+    type: "one_way_platform",
+    defaults: {},
+    xFields: ["leftX"],
+    yFields: ["topY"],
+    xPlusGrid: ["rightX"],
+  },
+  solid_wall: {
+    type: "solid_wall",
+    defaults: {},
+    xFields: ["x"],
+    yFields: ["topY"],
+    yPlusGrid: ["bottomY"],
+  },
+  fall_zone: {
+    type: "fall_zone",
+    defaults: { width: 0, height: 0 },
+    xFields: ["x"],
+    yFields: ["y"],
+    xPlusGrid: ["width"],
+    yPlusGrid: ["height"],
+  },
+  instant_kill_hazard: {
+    type: "instant_kill_hazard",
+    defaults: { width: 0, height: 0 },
+    xFields: ["x"],
+    yFields: ["y"],
+    xPlusGrid: ["width"],
+    yPlusGrid: ["height"],
+  },
+  spawn_point: {
+    type: "spawn_point",
+    defaults: {},
+    xFields: ["x"],
+    yFields: ["y"],
+  },
+  weapon_spawn: {
+    type: "weapon_spawn",
+    defaults: {
+      weaponId: "",
+      respawnMs: 10000,
+      despawnAfterMs: 0,
+      spawnStyle: "fade_in",
+      despawnStyle: "shrink_pop",
+      mode: "fixed",
+    },
+    xFields: ["x"],
+    yFields: ["y"],
+  },
+  item_spawn: {
+    type: "item_spawn",
+    defaults: {
+      itemId: "",
+      respawnMs: 15000,
+      spawnStyle: "fade_in",
+      mode: "fixed",
+    },
+    xFields: ["x"],
+    yFields: ["y"],
+  },
+};
+
+/**
+ * 주어진 타입과 좌표로 EditableElement를 생성합니다.
+ * ELEMENT_DEFAULTS 맵을 사용하여 타입별 기본값을 적용합니다.
+ */
+function createRawElement(
+  type: ElementType,
+  id: string,
+  worldX: number,
+  worldY: number,
+  gridSize: number,
+): EditableElement {
+  const def = ELEMENT_DEFAULTS[type];
+  const element: Record<string, unknown> = { id, ...def.defaults };
+
+  if (def.type) {
+    element.type = def.type;
+  }
+
+  // 위치 필드 설정
+  for (const f of def.xFields) {
+    element[f] = worldX;
+  }
+  for (const f of def.yFields) {
+    element[f] = worldY;
+  }
+  for (const f of def.xPlusGrid ?? []) {
+    element[f] = worldX + gridSize;
+  }
+  for (const f of def.yPlusGrid ?? []) {
+    element[f] = worldY + gridSize;
+  }
+
+  return element as unknown as EditableElement;
+}
 
 /**
  * ElementManager — 씬 내 모든 EditorElementRenderer 인스턴스를 관리합니다.
@@ -29,7 +147,7 @@ export class ElementManager {
 
   /**
    * 지정된 타입의 새 요소를 월드 좌표에 생성합니다.
-   * - rect 타입: 기본 크기로 생성
+   * - rect 타입: 기본 크기(gridSize)로 생성
    * - point 타입: 정확한 위치에 생성
    */
   createElement(
@@ -38,103 +156,8 @@ export class ElementManager {
     worldY: number,
   ): EditableElement | null {
     const id = editorState.generateId(type);
-    let element: EditableElement;
-
-    switch (type) {
-      case "floor": {
-        const gridSize = editorState.gridSize;
-        element = {
-          id,
-          type: "floor",
-          leftX: worldX,
-          rightX: worldX + gridSize,
-          topY: worldY,
-        } as Floor;
-        break;
-      }
-      case "one_way_platform": {
-        const gridSize = editorState.gridSize;
-        element = {
-          id,
-          type: "one_way_platform",
-          leftX: worldX,
-          rightX: worldX + gridSize,
-          topY: worldY,
-        } as OneWayPlatform;
-        break;
-      }
-      case "solid_wall": {
-        const gridSize = editorState.gridSize;
-        element = {
-          id,
-          type: "solid_wall",
-          x: worldX,
-          topY: worldY,
-          bottomY: worldY + gridSize,
-        } as SolidWall;
-        break;
-      }
-      case "fall_zone": {
-        const gridSize = editorState.gridSize;
-        element = {
-          id,
-          type: "fall_zone",
-          x: worldX,
-          y: worldY,
-          width: gridSize,
-          height: gridSize,
-        } as FallZone;
-        break;
-      }
-      case "instant_kill_hazard": {
-        const gridSize = editorState.gridSize;
-        element = {
-          id,
-          type: "instant_kill_hazard",
-          x: worldX,
-          y: worldY,
-          width: gridSize,
-          height: gridSize,
-        } as InstantKillHazard;
-        break;
-      }
-      case "spawn_point": {
-        element = {
-          id,
-          x: worldX,
-          y: worldY,
-        } as SpawnPoint;
-        break;
-      }
-      case "weapon_spawn": {
-        element = {
-          id,
-          weaponId: "",
-          x: worldX,
-          y: worldY,
-          respawnMs: 10000,
-          despawnAfterMs: 0,
-          spawnStyle: "fade_in",
-          despawnStyle: "shrink_pop",
-          mode: "fixed",
-        } as WeaponSpawn;
-        break;
-      }
-      case "item_spawn": {
-        element = {
-          id,
-          itemId: "",
-          x: worldX,
-          y: worldY,
-          respawnMs: 15000,
-          spawnStyle: "fade_in",
-          mode: "fixed",
-        } as ItemSpawn;
-        break;
-      }
-      default:
-        return null;
-    }
+    const gridSize = editorState.gridSize;
+    const element = createRawElement(type, id, worldX, worldY, gridSize);
 
     // editorState에 추가
     editorState.addElement(element);

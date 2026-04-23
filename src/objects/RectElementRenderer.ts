@@ -1,12 +1,10 @@
-import type {
-  EditableElement,
-  ElementType,
-  Floor,
-  OneWayPlatform,
-  SolidWall,
-  FallZone,
-  InstantKillHazard,
-} from "@/types/map";
+import type { EditableElement, ElementType } from "@/types/map";
+import {
+  detectElementType,
+  isFloor,
+  isHorizontalBar,
+  isVerticalBar,
+} from "@/types/type-guards";
 import { EDITOR_CONFIG } from "@/config";
 import { EditorElementRenderer } from "./EditorElementRenderer";
 
@@ -34,64 +32,33 @@ export class RectElementRenderer extends EditorElementRenderer {
 
   constructor(scene: Phaser.Scene, data: EditableElement) {
     super(scene, data);
-    const detected = this.detectType(data);
-    this.elementType = detected;
+    this.elementType = detectElementType(data) as RectElementType;
     this.computeRect();
     this.drawShape();
-  }
-
-  // ─── Type detection ───
-
-  private detectType(data: EditableElement): RectElementType {
-    if ("type" in data) {
-      const t = (data as { type: string }).type;
-      if (
-        t === "floor" ||
-        t === "one_way_platform" ||
-        t === "solid_wall" ||
-        t === "fall_zone" ||
-        t === "instant_kill_hazard"
-      ) {
-        return t;
-      }
-    }
-    // 기본값 (발생하지 않아야 함)
-    return "floor";
   }
 
   // ─── Rect computation ───
 
   private computeRect(): void {
     const data = this.elementData;
-    const type = this.elementType;
 
-    if (type === "floor") {
-      const d = data as unknown as Floor;
+    if (isHorizontalBar(data)) {
       this.rect = {
-        x: d.leftX,
-        y: d.topY,
-        width: d.rightX - d.leftX,
-        height: 16,
+        x: data.leftX,
+        y: data.topY,
+        width: data.rightX - data.leftX,
+        height: isFloor(data) ? 16 : 8,
       };
-    } else if (type === "one_way_platform") {
-      const d = data as unknown as OneWayPlatform;
+    } else if (isVerticalBar(data)) {
       this.rect = {
-        x: d.leftX,
-        y: d.topY,
-        width: d.rightX - d.leftX,
-        height: 8,
-      };
-    } else if (type === "solid_wall") {
-      const d = data as unknown as SolidWall;
-      this.rect = {
-        x: d.x - 8,
-        y: d.topY,
+        x: data.x - 8,
+        y: data.topY,
         width: 16,
-        height: d.bottomY - d.topY,
+        height: data.bottomY - data.topY,
       };
     } else {
       // fall_zone / instant_kill_hazard — both have x, y, width, height
-      const d = data as unknown as FallZone | InstantKillHazard;
+      const d = data as { x: number; y: number; width: number; height: number };
       this.rect = {
         x: d.x,
         y: d.y,
